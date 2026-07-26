@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mainichi Mileage - ゲーミフィケーション習慣・タスク管理</title>
+  <meta name="description" content="毎日目標時間を積み上げてレベルアップ！日付変更時のペナルティルールを備えたタスク＆習慣管理アプリ">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- 背景グローデコレーション -->
+    <div class="glow-bg glow-1"></div>
+    <div class="glow-bg glow-2"></div>
+
+    <!-- ヘッダーエリア -->
+    <header class="app-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <i class="fa-solid fa-fire-flame-curved"></i>
+        </div>
+        <div>
+          <h1 class="app-title">Mainichi Mileage</h1>
+          <p class="app-subtitle">日々の目標を継続・成長させる習慣マネージメント</p>
+        </div>
+      </div>
+
+      <!-- ステータスカード -->
+      <div class="status-board">
+        <div class="status-item points-item">
+          <div class="status-label"><i class="fa-solid fa-coins"></i> 累積ポイント (現在 / 過去最高)</div>
+          <div class="status-value-group">
+            <span id="total-points" class="status-value">0</span>
+            <span class="status-divider">/</span>
+            <span id="max-points" class="status-max-value">0</span>
+            <span class="status-unit">pt</span>
+          </div>
+          <div class="points-progress-container" title="過去最高ポイントに対する割合">
+            <div id="points-progress-bar" class="points-progress-bar" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <div class="status-item level-item">
+          <div class="status-label"><i class="fa-solid fa-trophy"></i> ランク</div>
+          <div id="user-level" class="status-badge">Beginner</div>
+        </div>
+
+        <div class="status-item date-item">
+          <div class="status-label"><i class="fa-regular fa-calendar"></i> 最終更新日</div>
+          <div id="last-date" class="status-date">----/--/--</div>
+        </div>
+
+        <div class="action-buttons-header">
+          <button id="btn-open-add-category" class="btn btn-primary btn-sm" title="新しいカテゴリーを追加します">
+            <i class="fa-solid fa-folder-plus"></i> 新規カテゴリー追加
+          </button>
+          <button id="btn-next-day" class="btn btn-secondary btn-sm" title="日付変更時の減分ペナルティ処理をシミュレートテストします">
+            <i class="fa-solid fa-forward-step"></i> 翌日に進める (テスト)
+          </button>
+          <button id="btn-export-data" class="btn btn-ghost btn-sm" title="現在のデータをJSONファイルとしてダウンロードします">
+            <i class="fa-solid fa-file-export"></i> バックアップ出力
+          </button>
+          <button id="btn-import-data" class="btn btn-ghost btn-sm" title="JSONファイルからデータを読み込み復元します">
+            <i class="fa-solid fa-file-import"></i> バックアップ読込
+          </button>
+          <input type="file" id="import-file-input" accept=".json" style="display: none;">
+          <button id="btn-reset-all" class="btn btn-ghost btn-sm" title="すべてのデータを初期化します">
+            <i class="fa-solid fa-rotate-left"></i> リセット
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <!-- ルール説明ミニバナー -->
+      <section class="rule-banner">
+        <div class="rule-chip rule-inc">
+          <i class="fa-solid fa-arrow-up-right-dots"></i>
+          <span><strong>達成増分ルール:</strong> 目標達成で <strong>+1 pt</strong> ＆ 次回目標時間 <strong>+1 分</strong>！</span>
+        </div>
+        <div class="rule-chip rule-dec">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span><strong>日付変更ペナルティ:</strong> 日付切替時 <strong>-1 pt</strong> (0pt時は全目標時間が <strong>-1 分</strong>)</span>
+        </div>
+      </section>
+
+      <!-- カテゴリーカード一覧 -->
+      <section class="category-grid" id="category-grid">
+        <!-- JSによりダイナミック生成されるカードが入る -->
+      </section>
+    </main>
+
+    <!-- フッター -->
+    <footer class="app-footer">
+      <p>&copy; 2026 Mainichi Mileage App • Gamified Task Management</p>
+    </footer>
+  </div>
+
+  <!-- トースト通知コンテナ -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- カテゴリー編集モーダル（名称・目標時間・アイコン） -->
+  <div id="edit-category-modal" class="modal-backdrop hidden">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3 id="edit-cat-modal-title"><i class="fa-solid fa-pen-to-square"></i> カテゴリーを編集</h3>
+        <button id="edit-cat-close-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">カテゴリーの名称、本日の目標時間、アイコンを変更できます。</p>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">カテゴリー名称</label>
+          <input type="text" id="edit-cat-name-input" class="task-item-input" placeholder="カテゴリー名" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">本日の目標時間（分）</label>
+          <div class="input-group">
+            <input type="number" id="edit-cat-target-input" min="1" max="1440" value="30" placeholder="目標分数">
+            <span class="input-unit">分</span>
+          </div>
+          <div class="quick-add-buttons" style="margin-top: 0.5rem; margin-bottom: 0;">
+            <button class="btn btn-chip edit-quick-btn" data-edit-target="15">15分</button>
+            <button class="btn btn-chip edit-quick-btn" data-edit-target="30">30分</button>
+            <button class="btn btn-chip edit-quick-btn" data-edit-target="45">45分</button>
+            <button class="btn btn-chip edit-quick-btn" data-edit-target="60">60分</button>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">リセットタイミング</label>
+          <div style="display:flex; gap:0.5rem;">
+            <select id="edit-cat-reset-timing" class="task-item-input" style="flex:1;">
+              <option value="daily">毎日</option>
+              <option value="weekly">毎週</option>
+              <option value="manual">手動（日付でリセットしない）</option>
+            </select>
+            <select id="edit-cat-reset-day" class="task-item-input" style="width:120px;" disabled>
+              <option value="1">月曜日</option>
+              <option value="2">火曜日</option>
+              <option value="3">水曜日</option>
+              <option value="4">木曜日</option>
+              <option value="5">金曜日</option>
+              <option value="6">土曜日</option>
+              <option value="0">日曜日</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">アイコン（絵文字）</label>
+          <div class="icon-selector-chips" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+            <button class="btn btn-chip edit-icon-chip" data-icon="🎯">🎯</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="🚀">🚀</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="⚡">⚡</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="🌱">🌱</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="📋">📋</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="🔥">🔥</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="📚">📚</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="🏋️‍♂️">🏋️‍♂️</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="💻">💻</button>
+            <button class="btn btn-chip edit-icon-chip" data-icon="🎨">🎨</button>
+          </div>
+          <input type="text" id="edit-cat-icon-input" class="task-item-input" value="🎯" placeholder="絵文字" style="width:70px; text-align:center;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="edit-cat-cancel-btn" class="btn btn-secondary">キャンセル</button>
+        <button id="edit-cat-submit-btn" class="btn btn-primary"><i class="fa-solid fa-check"></i> 変更を保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新規カテゴリー作成モーダル -->
+  <div id="add-category-modal" class="modal-backdrop hidden">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-folder-plus"></i> 新しいカテゴリーを作成</h3>
+        <button id="add-cat-close-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">管理したい新しいカテゴリー名と初期目標時間を設定します。</p>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">カテゴリー名</label>
+          <input type="text" id="add-cat-name-input" class="task-item-input" placeholder="例: 🏋️‍♂️ 筋トレ・運動" style="width:100%;">
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">初期目標時間（分）</label>
+          <div class="input-group">
+            <input type="number" id="add-cat-target-input" min="1" max="1440" value="30" placeholder="分数">
+            <span class="input-unit">分</span>
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">リセットタイミング</label>
+          <div style="display:flex; gap:0.5rem;">
+            <select id="add-cat-reset-timing" class="task-item-input" style="flex:1;">
+              <option value="daily">毎日</option>
+              <option value="weekly">毎週</option>
+              <option value="manual">手動（日付でリセットしない）</option>
+            </select>
+            <select id="add-cat-reset-day" class="task-item-input" style="width:120px;" disabled>
+              <option value="1">月曜日</option>
+              <option value="2">火曜日</option>
+              <option value="3">水曜日</option>
+              <option value="4">木曜日</option>
+              <option value="5">金曜日</option>
+              <option value="6">土曜日</option>
+              <option value="0">日曜日</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">アイコン（選択または絵文字入力）</label>
+          <div class="icon-selector-chips" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.5rem;">
+            <button class="btn btn-chip icon-chip" data-icon="🎯">🎯</button>
+            <button class="btn btn-chip icon-chip" data-icon="🚀">🚀</button>
+            <button class="btn btn-chip icon-chip" data-icon="⚡">⚡</button>
+            <button class="btn btn-chip icon-chip" data-icon="🌱">🌱</button>
+            <button class="btn btn-chip icon-chip" data-icon="📋">📋</button>
+            <button class="btn btn-chip icon-chip" data-icon="🔥">🔥</button>
+            <button class="btn btn-chip icon-chip" data-icon="📚">📚</button>
+            <button class="btn btn-chip icon-chip" data-icon="🏋️‍♂️">🏋️‍♂️</button>
+            <button class="btn btn-chip icon-chip" data-icon="💻">💻</button>
+            <button class="btn btn-chip icon-chip" data-icon="🎨">🎨</button>
+          </div>
+          <input type="text" id="add-cat-icon-input" class="task-item-input" value="🎯" placeholder="絵文字" style="width:70px; text-align:center;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="add-cat-cancel-btn" class="btn btn-secondary">キャンセル</button>
+        <button id="add-cat-submit-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> カテゴリーを作成</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="sample_profile.js"></script>
+  <script src="my_profile.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
