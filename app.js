@@ -312,7 +312,9 @@ function checkAndApplyDateTransition() {
     // 日付が飛んでいる場合、1日ごとにペナルティをループ計算
     while (lastDate < today) {
       daysPassed++;
-      if (state.totalPoints > 0) {
+      if (state.maxPoints <= 15) {
+        // 過去最高ポイントが15以下の場合は、ペナルティを無視する
+      } else if (state.totalPoints > 0) {
         state.totalPoints = Math.max(0, state.totalPoints - 1);
         pointDeductions++;
       } else {
@@ -368,7 +370,9 @@ function simulateNextDay() {
 
   let penaltyMsg = `【日付切替テスト】(${state.lastUpdatedDate} ➔ ${nextDate})\n`;
 
-  if (state.totalPoints > 0) {
+  if (state.maxPoints <= 15) {
+    penaltyMsg += `▶ 過去最高ポイントが15以下のため、ペナルティ処理は無視されました。`;
+  } else if (state.totalPoints > 0) {
     state.totalPoints = Math.max(0, state.totalPoints - 1);
     penaltyMsg += `▶ ポイントを -1pt 減分しました。(残り ${state.totalPoints}pt)`;
   } else {

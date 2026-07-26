@@ -1,6 +1,3 @@
-// my_profile.js
-// あなた専用のプライベートプロファイルデータです。
-// このファイルはローカルにのみ保存され、.gitignoreの指定によりGitリポジトリには登録されません。
 const MY_PROFILE_DATA = {
   "totalPoints": 15,
   "maxPoints": 15,
