@@ -1,7 +1,7 @@
-// sample_profile.js
-// アプリを初めて起動したユーザーへ表示されるサンプル設定データです。
-// このファイルはGitHubに同期され、全員に共有されます。
-const SAMPLE_PROFILE_DATA = {
+// my_profile.js
+// あなた専用のプライベートプロファイルデータです。
+// このファイルはローカルにのみ保存され、.gitignoreの指定によりGitリポジトリには登録されません。
+const MY_PROFILE_DATA = {
   "totalPoints": 15,
   "maxPoints": 15,
   "categories": [
