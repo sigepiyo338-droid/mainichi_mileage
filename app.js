@@ -75,12 +75,52 @@ function shouldResetCategory(category, targetDateStr) {
   return true;
 }
 
+// --- アラート通知＆効果音ヘルパー ---
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function sendDesktopNotification(title, message) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification(title, {
+      body: message,
+      icon: '🎯'
+    });
+  }
+}
+
+function playAlarmSound() {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  setTimeout(() => {
+    playTone(audioCtx, 880, 0.1);
+  }, 0);
+  setTimeout(() => {
+    playTone(audioCtx, 880, 0.1);
+  }, 150);
+}
+
+function playTone(ctx, freq, duration) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.05, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + duration);
+}
+
 // --- 初期化 & ローカルストレージロード ---
 function initApp() {
   loadState();
   checkAndApplyDateTransition();
   renderApp();
   setupGlobalEventListeners();
+  requestNotificationPermission();
 }
 
 // --- HTMLエスケープヘルパー ---
@@ -141,6 +181,17 @@ function toggleCategoryTaskItem(categoryId, itemId) {
       }
 
       item.isDone = !item.isDone;
+
+      // カウントの増減処理
+      if (!item.checkCount) {
+        item.checkCount = 0;
+      }
+      if (item.isDone) {
+        item.checkCount += 1;
+      } else {
+        item.checkCount = Math.max(0, item.checkCount - 1);
+      }
+
       saveState();
       renderApp();
 
@@ -155,6 +206,22 @@ function toggleCategoryTaskItem(categoryId, itemId) {
       }
     }
   }
+}
+
+function toggleTaskSort(categoryId) {
+  const category = state.categories.find(c => c.id === categoryId);
+  if (!category) return;
+
+  if (!category.itemSortOrder || category.itemSortOrder === 'none') {
+    category.itemSortOrder = 'asc';
+  } else if (category.itemSortOrder === 'asc') {
+    category.itemSortOrder = 'desc';
+  } else {
+    category.itemSortOrder = 'none';
+  }
+
+  saveState();
+  renderApp();
 }
 
 function removeCategoryTaskItem(categoryId, itemId) {
@@ -412,8 +479,8 @@ function completeTask(categoryId) {
   const category = state.categories.find(c => c.id === categoryId);
   if (!category) return;
 
-  // タイマーが動いていれば停止
-  stopTimer(categoryId);
+  // タイマーを停止し、実績時間と秒数をリセット
+  resetTimer(categoryId);
 
   // 増分ルール適用: +1ポイント ＆ このカテゴリーの次回目標時間 +1分
   state.totalPoints += 1;
@@ -466,6 +533,8 @@ function updateTimerTick(categoryId) {
         if (category.executedMinutes >= category.targetMinutes) {
           stopTimer(categoryId);
           showToast('🏆 目標達成！', `「${category.name}」の本日の目標時間に到達しました！`, 'success');
+          playAlarmSound();
+          sendDesktopNotification('🏆 目標達成！', `「${category.name}」の本日の目標時間に到達しました！`);
           return;
         }
       }
@@ -672,6 +741,22 @@ function renderApp() {
     card.className = `category-card ${category.isCompleted ? 'completed' : ''}`;
     card.id = `card-${category.id}`;
 
+    // ソート処理されたリストを用意
+    let itemsToRender = [...(category.items || [])];
+    if (category.itemSortOrder === 'asc') {
+      itemsToRender.sort((a, b) => (a.checkCount || 0) - (b.checkCount || 0));
+    } else if (category.itemSortOrder === 'desc') {
+      itemsToRender.sort((a, b) => (b.checkCount || 0) - (a.checkCount || 0));
+    }
+
+    // ソートボタンの文言
+    let sortBtnHtml = '<i class="fa-solid fa-sort"></i> 登録順';
+    if (category.itemSortOrder === 'asc') {
+      sortBtnHtml = '<i class="fa-solid fa-sort-up"></i> 昇順';
+    } else if (category.itemSortOrder === 'desc') {
+      sortBtnHtml = '<i class="fa-solid fa-sort-down"></i> 降順';
+    }
+
     const dayLabels = ['日', '月', '火', '水', '木', '金', '土'];
     let resetLabel = '';
     if (category.resetTiming === 'weekly') {
@@ -740,6 +825,9 @@ function renderApp() {
         <div class="task-list-header">
           <span><i class="fa-solid fa-list-check"></i> タスク・習慣リスト</span>
           <div style="display:flex; align-items:center; gap:0.4rem;">
+            <button class="btn-reset-checklist" onclick="toggleTaskSort('${category.id}')" title="チェック回数で並べ替え" style="margin-right:0.3rem;">
+              <span style="font-size:0.75rem;">${sortBtnHtml}</span>
+            </button>
             ${category.resetTiming === 'manual' ? `<button class="btn-reset-checklist" onclick="resetCategoryProgress('${category.id}')" title="進捗とチェックリストを手動リセット"><i class="fa-solid fa-arrows-rotate"></i> リセット</button>` : ''}
             <span class="task-count">${(category.items || []).filter(i => i.isDone).length}/${(category.items || []).length}</span>
           </div>
@@ -749,12 +837,15 @@ function renderApp() {
           <button class="btn btn-sm btn-secondary" onclick="submitTaskItem('${category.id}')"><i class="fa-solid fa-plus"></i> 追加</button>
         </div>
         <ul class="task-items-list">
-          ${(category.items || []).length === 0 ? '<li style="font-size:0.8rem; color:var(--text-dim); text-align:center; padding:0.5rem 0;">タスクや習慣を追加できます</li>' : ''}
-          ${(category.items || []).map(item => `
+          ${itemsToRender.length === 0 ? '<li style="font-size:0.8rem; color:var(--text-dim); text-align:center; padding:0.5rem 0;">タスクや習慣を追加できます</li>' : ''}
+          ${itemsToRender.map(item => `
             <li class="task-item ${item.isDone ? 'done' : ''}">
               <label class="task-item-label">
                 <input type="checkbox" ${item.isDone ? 'checked' : ''} onchange="toggleCategoryTaskItem('${category.id}', '${item.id}')">
-                <span class="task-item-text">${escapeHtml(item.text)}</span>
+                <span class="task-item-text">
+                  ${escapeHtml(item.text)}
+                  <span style="font-size:0.7rem; color:var(--text-muted); margin-left:0.25rem;">(${item.checkCount || 0}回)</span>
+                </span>
               </label>
               <button class="btn-icon btn-delete-item" onclick="removeCategoryTaskItem('${category.id}', '${item.id}')" title="削除">
                 <i class="fa-solid fa-trash-can"></i>
