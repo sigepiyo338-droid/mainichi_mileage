@@ -70,6 +70,12 @@ function shouldResetCategory(category, targetDateStr) {
     const resetDay = category.resetDayOfWeek !== undefined ? parseInt(category.resetDayOfWeek, 10) : 1;
     return dayOfWeek === resetDay;
   }
+
+  if (category.resetTiming === 'monthly') {
+    // 判定対象の日付（targetDateStr）が1日であるか判定
+    const targetDateObj = new Date(targetDateStr);
+    return targetDateObj.getDate() === 1;
+  }
   
   // デフォルトは毎日リセット ('daily' など)
   return true;
@@ -762,6 +768,8 @@ function renderApp() {
     if (category.resetTiming === 'weekly') {
       const dayStr = dayLabels[category.resetDayOfWeek !== undefined ? category.resetDayOfWeek : 1];
       resetLabel = `毎週${dayStr}曜`;
+    } else if (category.resetTiming === 'monthly') {
+      resetLabel = '毎月';
     } else if (category.resetTiming === 'manual') {
       resetLabel = '手動';
     } else {
