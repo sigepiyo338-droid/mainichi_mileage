@@ -230,6 +230,41 @@ function toggleTaskSort(categoryId) {
   renderApp();
 }
 
+function incrementTaskCheckCount(categoryId, itemId) {
+  const category = state.categories.find(c => c.id === categoryId);
+  if (category && category.items) {
+    const item = category.items.find(i => i.id === itemId);
+    if (item) {
+      // 画面全体と、該当カテゴリーカード内のタスクリストのスクロール位置を保存
+      const windowScrollPos = window.scrollY;
+      let listScrollTop = 0;
+      const card = document.getElementById(`card-${categoryId}`);
+      if (card) {
+        const list = card.querySelector('.task-items-list');
+        if (list) {
+          listScrollTop = list.scrollTop;
+        }
+      }
+
+      // カウントを +1
+      item.checkCount = (item.checkCount || 0) + 1;
+
+      saveState();
+      renderApp();
+
+      // スクロール位置を復元
+      window.scrollTo(0, windowScrollPos);
+      const newCard = document.getElementById(`card-${categoryId}`);
+      if (newCard) {
+        const list = newCard.querySelector('.task-items-list');
+        if (list) {
+          list.scrollTop = listScrollTop;
+        }
+      }
+    }
+  }
+}
+
 function removeCategoryTaskItem(categoryId, itemId) {
   const category = state.categories.find(c => c.id === categoryId);
   if (category && category.items) {
@@ -296,6 +331,7 @@ function deleteCategory(categoryId) {
 }
 
 function openAddCategoryModal() {
+  closeSettingsModal();
   document.getElementById('add-cat-name-input').value = '';
   document.getElementById('add-cat-target-input').value = 30;
   document.getElementById('add-cat-icon-input').value = '🎯';
@@ -304,6 +340,14 @@ function openAddCategoryModal() {
 
 function closeAddCategoryModal() {
   document.getElementById('add-category-modal').classList.add('hidden');
+}
+
+function openSettingsModal() {
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  document.getElementById('settings-modal').classList.add('hidden');
 }
 
 // データ読み込み
@@ -855,6 +899,9 @@ function renderApp() {
                   <span style="font-size:0.7rem; color:var(--text-muted); margin-left:0.25rem;">(${item.checkCount || 0}回)</span>
                 </span>
               </label>
+              <button class="btn-icon" onclick="incrementTaskCheckCount('${category.id}', '${item.id}')" title="実行回数を+1" style="color: var(--accent-emerald); font-size: 1.05rem; margin-right: 0.2rem;">
+                <i class="fa-solid fa-circle-plus"></i>
+              </button>
               <button class="btn-icon btn-delete-item" onclick="removeCategoryTaskItem('${category.id}', '${item.id}')" title="削除">
                 <i class="fa-solid fa-trash-can"></i>
               </button>
@@ -958,6 +1005,11 @@ function showToast(title, message, type = 'info') {
 
 // --- イベントリスナー設定 ---
 function setupGlobalEventListeners() {
+  // 設定ボタンの開閉イベント
+  document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
+  document.getElementById('settings-close-btn').addEventListener('click', closeSettingsModal);
+  document.getElementById('settings-cancel-btn').addEventListener('click', closeSettingsModal);
+
   // 翌日に進めるボタン
   document.getElementById('btn-next-day').addEventListener('click', simulateNextDay);
 

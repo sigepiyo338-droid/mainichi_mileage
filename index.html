@@ -56,43 +56,19 @@
 
         <div class="status-item date-item">
           <div class="status-label"><i class="fa-regular fa-calendar"></i> 最終更新日</div>
-          <div id="last-date" class="status-date">----/--/--</div>
+          <div style="display:flex; align-items:center; gap:0.4rem;">
+            <div id="last-date" class="status-date">----/--/--</div>
+            <button id="btn-open-settings" class="btn-icon" title="設定" style="font-size: 2.2rem; padding: 0.1rem; line-height: 1;"><i class="fa-solid fa-gear"></i></button>
+          </div>
         </div>
 
-        <div class="action-buttons-header">
-          <button id="btn-open-add-category" class="btn btn-primary btn-sm" title="新しいカテゴリーを追加します">
-            <i class="fa-solid fa-folder-plus"></i> 新規カテゴリー追加
-          </button>
-          <button id="btn-next-day" class="btn btn-secondary btn-sm" title="日付変更時の減分ペナルティ処理をシミュレートテストします">
-            <i class="fa-solid fa-forward-step"></i> 翌日に進める (テスト)
-          </button>
-          <button id="btn-export-data" class="btn btn-ghost btn-sm" title="現在のデータをJSONファイルとしてダウンロードします">
-            <i class="fa-solid fa-file-export"></i> バックアップ出力
-          </button>
-          <button id="btn-import-data" class="btn btn-ghost btn-sm" title="JSONファイルからデータを読み込み復元します">
-            <i class="fa-solid fa-file-import"></i> バックアップ読込
-          </button>
-          <input type="file" id="import-file-input" accept=".json" style="display: none;">
-          <button id="btn-reset-all" class="btn btn-ghost btn-sm" title="すべてのデータを初期化します">
-            <i class="fa-solid fa-rotate-left"></i> リセット
-          </button>
-        </div>
+
       </div>
     </header>
 
     <!-- メインコンテンツ -->
     <main class="main-content">
-      <!-- ルール説明ミニバナー -->
-      <section class="rule-banner">
-        <div class="rule-chip rule-inc">
-          <i class="fa-solid fa-arrow-up-right-dots"></i>
-          <span><strong>達成増分ルール:</strong> 目標達成で <strong>+1 pt</strong> ＆ 次回目標時間 <strong>+1 分</strong>！</span>
-        </div>
-        <div class="rule-chip rule-dec">
-          <i class="fa-solid fa-triangle-exclamation"></i>
-          <span><strong>日付変更ペナルティ:</strong> 日付切替時 <strong>-1 pt</strong> (0pt時は全目標時間が <strong>-1 分</strong>)</span>
-        </div>
-      </section>
+
 
       <!-- カテゴリーカード一覧 -->
       <section class="category-grid" id="category-grid">
@@ -239,6 +215,50 @@
       <div class="modal-footer">
         <button id="add-cat-cancel-btn" class="btn btn-secondary">キャンセル</button>
         <button id="add-cat-submit-btn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> カテゴリーを作成</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div id="settings-modal" class="modal-backdrop hidden">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-gear"></i> 設定</h3>
+        <button id="settings-close-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="min-height: 100px; display: flex; flex-direction: column; gap: 0.8rem; padding: 1.5rem;">
+        <div class="rule-banner" style="margin-bottom: 0.5rem; flex-direction: column;">
+          <div class="rule-chip rule-inc" style="min-width: 0;">
+            <i class="fa-solid fa-arrow-up-right-dots"></i>
+            <span><strong>達成増分ルール:</strong> 目標達成で <strong>+1 pt</strong> ＆ 次回目標時間 <strong>+1 分</strong>！</span>
+          </div>
+          <div class="rule-chip rule-dec" style="min-width: 0;">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span><strong>日付変更ペナルティ:</strong> 日付切替時 <strong>-1 pt</strong> (0pt時は全目標時間が <strong>-1 分</strong>)</span>
+          </div>
+        </div>
+        <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 0.5rem 0;">
+        <button id="btn-open-add-category" class="btn btn-primary" title="新しいカテゴリーを追加します" style="width: 100%;">
+          <i class="fa-solid fa-folder-plus"></i> 新規カテゴリー追加
+        </button>
+        <button id="btn-next-day" class="btn btn-secondary" title="日付変更時の減分ペナルティ処理をシミュレートテストします" style="width: 100%;">
+          <i class="fa-solid fa-forward-step"></i> 翌日に進める (テスト)
+        </button>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <button id="btn-export-data" class="btn btn-secondary" title="現在のデータをJSONファイルとしてダウンロードします" style="padding: 0.6rem 0.5rem;">
+            <i class="fa-solid fa-file-export"></i> バックアップ出力
+          </button>
+          <button id="btn-import-data" class="btn btn-secondary" title="JSONファイルからデータを読み込み復元します" style="padding: 0.6rem 0.5rem;">
+            <i class="fa-solid fa-file-import"></i> バックアップ読込
+          </button>
+        </div>
+        <input type="file" id="import-file-input" accept=".json" style="display: none;">
+        <button id="btn-reset-all" class="btn btn-ghost" title="すべてのデータを初期化します" style="width: 100%; border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 0.5rem;">
+          <i class="fa-solid fa-rotate-left"></i> リセット
+        </button>
+      </div>
+      <div class="modal-footer">
+        <button id="settings-cancel-btn" class="btn btn-secondary">閉じる</button>
       </div>
     </div>
   </div>
