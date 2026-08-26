@@ -722,32 +722,15 @@ function saveCategoryEdit(newName, newTarget, newIcon, newResetTiming, newResetD
   closeEditCategoryModal();
 }
 
-// --- 全データ初期化 ---
+// --- 全データ初期化（ポイントのリセット処理に変更） ---
 function resetAllData() {
-  if (confirm('すべてのポイント、目標時間、実績データを初期状態にリセットしますか？\n(読み込まれているプロファイルの初期状態に戻ります)')) {
-    Object.keys(activeTimers).forEach(id => stopTimer(id));
+  if (confirm('累積ポイント（現在 / 過去最高）をそれぞれ 5 にリセットしますか？')) {
+    state.totalPoints = 5;
+    state.maxPoints = 5;
     
-    let initialProfile = null;
-    if (typeof MY_PROFILE_DATA !== 'undefined') {
-      initialProfile = MY_PROFILE_DATA;
-    } else if (typeof SAMPLE_PROFILE_DATA !== 'undefined') {
-      initialProfile = SAMPLE_PROFILE_DATA;
-    }
-
-    if (initialProfile) {
-      state = JSON.parse(JSON.stringify(initialProfile));
-      state.lastUpdatedDate = getTodayString();
-    } else {
-      state = {
-        lastUpdatedDate: getTodayString(),
-        totalPoints: 0,
-        maxPoints: 0,
-        categories: JSON.parse(JSON.stringify(INITIAL_CATEGORIES))
-      };
-    }
     saveState();
     renderApp();
-    showToast('リセット完了', '初期プロファイルデータにリセットしました。', 'info');
+    showToast('リセット完了', '累積ポイントを 5 にリセットしました。', 'info');
   }
 }
 
