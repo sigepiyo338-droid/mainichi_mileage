@@ -1,0 +1,18 @@
+{
+  "name": "mainichi-mileage",
+  "version": "1.0.0",
+  "description": "ゲーミフィケーション習慣・タスク管理アプリ (Cloud Run 対応)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@google-cloud/firestore": "^7.11.0",
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

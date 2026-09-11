@@ -29,7 +29,10 @@
           <i class="fa-solid fa-fire-flame-curved"></i>
         </div>
         <div>
-          <h1 class="app-title">Mainichi Mileage</h1>
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <h1 class="app-title">Mainichi Mileage</h1>
+            <span id="sync-status-badge" class="sync-badge local" title="同期ステータス"><i class="fa-solid fa-laptop"></i> ローカル</span>
+          </div>
           <p class="app-subtitle">日々の目標を継続・成長させる習慣マネージメント</p>
         </div>
       </div>
@@ -232,9 +235,12 @@
             <i class="fa-solid fa-arrow-up-right-dots"></i>
             <span><strong>達成増分ルール:</strong> 目標達成で <strong>+1 pt</strong> ＆ 次回目標時間 <strong>+1 分</strong>！</span>
           </div>
-          <div class="rule-chip rule-dec" style="min-width: 0;">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <span><strong>日付変更ペナルティ:</strong> 日付切替時 <strong>-1 pt</strong> (0pt時は全目標時間が <strong>-1 分</strong>)</span>
+          <div class="rule-chip rule-dec" style="min-width: 0; align-items: flex-start;">
+            <i class="fa-solid fa-triangle-exclamation" style="margin-top: 0.2rem;"></i>
+            <div>
+              <div><strong>日付変更ペナルティ:</strong> 日付切替時 <strong>-1 pt</strong> (0pt時は全目標時間が <strong>-1 分</strong>)</div>
+              <div style="font-size: 0.75rem; opacity: 0.85; margin-top: 0.25rem; line-height: 1.4;">※初心者保護: 過去最高が15pt以下の場合はペナルティ免除</div>
+            </div>
           </div>
         </div>
         <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 0.5rem 0;">
@@ -253,12 +259,52 @@
           </button>
         </div>
         <input type="file" id="import-file-input" accept=".json" style="display: none;">
+        <!-- クラウド同期連携エリア -->
+        <div id="settings-sync-section" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:0.85rem; font-weight:600;"><i class="fa-solid fa-cloud"></i> クラウド同期 (Cloud Run)</span>
+            <span id="settings-sync-status" class="sync-badge local" style="font-size:0.7rem;">ローカル</span>
+          </div>
+          <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">同じ合言葉を設定したPC・スマホ間でデータを自動同期できます。</p>
+          <button id="btn-change-passphrase" class="btn btn-secondary btn-sm" style="width:100%; margin-top:0.2rem;">
+            <i class="fa-solid fa-key"></i> 合言葉を設定 / 変更
+          </button>
+        </div>
+
         <button id="btn-reset-all" class="btn btn-ghost" title="累積ポイントをそれぞれ5にリセットします" style="width: 100%; border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 0.5rem;">
           <i class="fa-solid fa-rotate-left"></i> ポイントのリセット
         </button>
       </div>
       <div class="modal-footer">
         <button id="settings-cancel-btn" class="btn btn-secondary">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 合言葉入力モーダル -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="modal-content glass-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-lock"></i> クラウド同期の合言葉</h3>
+        <button id="auth-close-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          このCloud Runサーバーとデータを同期するための合言葉（パスフレーズ）を入力してください。<br>
+          ※正しい合言葉を入力した端末（PC・スマホ）間でのみデータが共有されます。
+        </p>
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">合言葉（パスフレーズ）</label>
+          <div class="auth-input-group">
+            <input type="password" id="auth-passphrase-input" class="task-item-input" placeholder="デプロイ時に設定した合言葉" autocomplete="current-password">
+            <button type="button" id="auth-toggle-pwd-btn" class="auth-toggle-pwd" title="パスワードの表示/非表示"><i class="fa-regular fa-eye"></i></button>
+          </div>
+          <div id="auth-error-msg" style="color:var(--accent-rose); font-size:0.8rem; margin-top:0.5rem; display:none;"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="auth-cancel-btn" class="btn btn-secondary">キャンセル (ローカル利用)</button>
+        <button id="auth-submit-btn" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-down"></i> 認証して同期開始</button>
       </div>
     </div>
   </div>

@@ -4,6 +4,12 @@
 
 // ストレージキー
 const STORAGE_KEY = 'mainichi_mileage_app_data_v1';
+const SYNC_PASSPHRASE_KEY = 'mainichi_mileage_sync_passphrase';
+
+// クラウド同期モード判定（http/httpsでアクセスしている場合に有効）
+const isCloudMode = window.location.protocol.startsWith('http');
+let cloudSyncDebounceTimer = null;
+let isSyncing = false;
 
 // デフォルト初期データ構造
 const INITIAL_CATEGORIES = [
@@ -120,13 +126,235 @@ function playTone(ctx, freq, duration) {
   osc.stop(ctx.currentTime + duration);
 }
 
+// --- クラウド同期 & 合言葉認証ロジック ---
+
+function updateSyncStatusUI(status, label, tooltip = '') {
+  const badge = document.getElementById('sync-status-badge');
+  const settingsBadge = document.getElementById('settings-sync-status');
+  const badges = [badge, settingsBadge].filter(Boolean);
+
+  badges.forEach(el => {
+    el.className = `sync-badge ${status}`;
+    let icon = 'fa-laptop';
+    if (status === 'synced') icon = 'fa-cloud-arrow-up';
+    else if (status === 'syncing') icon = 'fa-arrows-rotate';
+    else if (status === 'error') icon = 'fa-triangle-exclamation';
+    else if (status === 'local') icon = 'fa-laptop';
+
+    el.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${label}</span>`;
+    if (tooltip) {
+      el.title = tooltip;
+    }
+  });
+}
+
+function getSavedPassphrase() {
+  return localStorage.getItem(SYNC_PASSPHRASE_KEY) || '';
+}
+
+function setSavedPassphrase(passphrase) {
+  if (passphrase) {
+    localStorage.setItem(SYNC_PASSPHRASE_KEY, passphrase);
+  } else {
+    localStorage.removeItem(SYNC_PASSPHRASE_KEY);
+  }
+}
+
+function openAuthModal() {
+  const input = document.getElementById('auth-passphrase-input');
+  const errorDiv = document.getElementById('auth-error-msg');
+  if (input) {
+    input.value = getSavedPassphrase();
+  }
+  if (errorDiv) {
+    errorDiv.style.display = 'none';
+    errorDiv.innerText = '';
+  }
+  document.getElementById('auth-modal')?.classList.remove('hidden');
+  setTimeout(() => input?.focus(), 150);
+}
+
+function closeAuthModal() {
+  document.getElementById('auth-modal')?.classList.add('hidden');
+}
+
+function toggleAuthPasswordVisibility() {
+  const input = document.getElementById('auth-passphrase-input');
+  const btn = document.getElementById('auth-toggle-pwd-btn');
+  if (input && btn) {
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.innerHTML = '<i class="fa-regular fa-eye-slash"></i>';
+    } else {
+      input.type = 'password';
+      btn.innerHTML = '<i class="fa-regular fa-eye"></i>';
+    }
+  }
+}
+
+async function submitAuthPassphrase() {
+  const input = document.getElementById('auth-passphrase-input');
+  const errorDiv = document.getElementById('auth-error-msg');
+  const passphrase = input ? input.value.trim() : '';
+
+  if (!passphrase) {
+    if (errorDiv) {
+      errorDiv.innerText = '合言葉を入力してください。';
+      errorDiv.style.display = 'block';
+    }
+    return;
+  }
+
+  updateSyncStatusUI('syncing', '認証中...');
+
+  try {
+    const res = await fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      setSavedPassphrase(passphrase);
+      closeAuthModal();
+      showToast('🔑 認証成功', '合言葉が確認されました。クラウド同期を開始します！', 'success');
+      await fetchStateFromServer();
+    } else {
+      if (errorDiv) {
+        errorDiv.innerText = data.error || '合言葉が一致しません。';
+        errorDiv.style.display = 'block';
+      }
+      updateSyncStatusUI('error', '認証エラー', '合言葉が間違っています');
+    }
+  } catch (err) {
+    if (errorDiv) {
+      errorDiv.innerText = '通信エラーが発生しました: ' + err.message;
+      errorDiv.style.display = 'block';
+    }
+    updateSyncStatusUI('error', '通信エラー', err.message);
+  }
+}
+
+async function fetchStateFromServer() {
+  if (!isCloudMode) return;
+
+  updateSyncStatusUI('syncing', '同期中...');
+  isSyncing = true;
+
+  try {
+    const passphrase = getSavedPassphrase();
+    const res = await fetch('/api/state', {
+      headers: {
+        'x-sync-passphrase': passphrase
+      }
+    });
+
+    if (res.status === 401) {
+      updateSyncStatusUI('error', '要合言葉', 'クリックして合言葉を入力');
+      openAuthModal();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`サーバーエラー: ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    if (data.exists && data.state) {
+      const serverState = data.state;
+      
+      // カテゴリーの互換性・初期化保護
+      if (Array.isArray(serverState.categories)) {
+        const todayStr = getTodayString();
+        serverState.categories.forEach(cat => {
+          if (!Array.isArray(cat.items)) cat.items = [];
+          if (!cat.resetTiming) cat.resetTiming = 'daily';
+          if (cat.resetDayOfWeek === undefined) cat.resetDayOfWeek = 1;
+          if (!cat.lastResetDate) cat.lastResetDate = serverState.lastUpdatedDate || todayStr;
+        });
+      }
+
+      state = serverState;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      checkAndApplyDateTransition();
+      renderApp();
+      updateSyncStatusUI('synced', '同期完了', 'クラウドと最新状態が同期されています');
+    } else {
+      // サーバーにデータがまだない場合、現在のローカルstateをサーバーへ初期登録
+      await saveStateToServer(state);
+      updateSyncStatusUI('synced', '同期完了', 'クラウドに初期データを登録しました');
+    }
+  } catch (err) {
+    console.warn('クラウド同期エラー:', err);
+    updateSyncStatusUI('local', 'オフライン', 'クラウドとの同期が一時的に失敗しました');
+  } finally {
+    isSyncing = false;
+  }
+}
+
+async function saveStateToServer(stateToSave) {
+  if (!isCloudMode) return;
+
+  updateSyncStatusUI('syncing', '保存中...');
+
+  try {
+    const passphrase = getSavedPassphrase();
+    const res = await fetch('/api/state', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-sync-passphrase': passphrase
+      },
+      body: JSON.stringify({ state: stateToSave })
+    });
+
+    if (res.status === 401) {
+      updateSyncStatusUI('error', '要合言葉', 'クリックして合言葉を入力');
+      openAuthModal();
+      return;
+    }
+
+    if (!res.ok) {
+      throw new Error(`保存エラー: ${res.status}`);
+    }
+
+    updateSyncStatusUI('synced', '同期完了', '最新の変更をクラウドに保存しました');
+  } catch (err) {
+    console.warn('クラウド保存エラー:', err);
+    updateSyncStatusUI('error', '同期待機', 'オフラインのためローカルにのみ保存中');
+  }
+}
+
 // --- 初期化 & ローカルストレージロード ---
-function initApp() {
+async function initApp() {
   loadState();
   checkAndApplyDateTransition();
   renderApp();
   setupGlobalEventListeners();
   requestNotificationPermission();
+
+  if (isCloudMode) {
+    updateSyncStatusUI('syncing', '接続中...');
+    try {
+      const configRes = await fetch('/api/config');
+      const config = await configRes.json();
+      const savedPass = getSavedPassphrase();
+
+      if (config.requiresPassphrase && !savedPass) {
+        updateSyncStatusUI('error', '要合言葉', 'クリックして合言葉を入力');
+        openAuthModal();
+      } else {
+        await fetchStateFromServer();
+      }
+    } catch (err) {
+      console.warn('サーバー設定取得エラー:', err);
+      updateSyncStatusUI('local', 'ローカル');
+    }
+  } else {
+    updateSyncStatusUI('local', 'ローカル');
+  }
 }
 
 // --- HTMLエスケープヘルパー ---
@@ -414,6 +642,16 @@ function loadState() {
 // データ保存
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+  // クラウド同期モードの場合はデバウンスでサーバーへ保存
+  if (isCloudMode) {
+    if (cloudSyncDebounceTimer) {
+      clearTimeout(cloudSyncDebounceTimer);
+    }
+    cloudSyncDebounceTimer = setTimeout(() => {
+      saveStateToServer(state);
+    }, 600);
+  }
 }
 
 // --- 日付切替ペナルティ処理 (要件4) ---
@@ -1088,7 +1326,62 @@ function setupGlobalEventListeners() {
     }
   });
 
-  // タブがアクティブになったときにタイマーの経過時間を即時同期する
+  // クラウド同期バッジのクリック（エラー時や合言葉入力）
+  document.getElementById('sync-status-badge')?.addEventListener('click', () => {
+    if (isCloudMode) {
+      openAuthModal();
+    }
+  });
+
+  // 設定画面内の「合言葉を設定 / 変更」ボタン
+  document.getElementById('btn-change-passphrase')?.addEventListener('click', () => {
+    closeSettingsModal();
+    openAuthModal();
+  });
+
+  // 合言葉モーダルのイベント
+  document.getElementById('auth-close-btn')?.addEventListener('click', closeAuthModal);
+  document.getElementById('auth-cancel-btn')?.addEventListener('click', closeAuthModal);
+  document.getElementById('auth-submit-btn')?.addEventListener('click', submitAuthPassphrase);
+  document.getElementById('auth-toggle-pwd-btn')?.addEventListener('click', toggleAuthPasswordVisibility);
+  document.getElementById('auth-passphrase-input')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      submitAuthPassphrase();
+    }
+  });
+
+  // モーダルの背景クリックで閉じる処理（全モーダル共通UX）
+  const allModals = [
+    { id: 'settings-modal', closeFn: closeSettingsModal },
+    { id: 'edit-category-modal', closeFn: closeEditCategoryModal },
+    { id: 'add-category-modal', closeFn: closeAddCategoryModal },
+    { id: 'auth-modal', closeFn: closeAuthModal }
+  ];
+
+  allModals.forEach(({ id, closeFn }) => {
+    const modal = document.getElementById(id);
+    if (modal) {
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeFn();
+        }
+      });
+    }
+  });
+
+  // Escapeキーによるモーダル終了
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      allModals.forEach(({ id, closeFn }) => {
+        const modal = document.getElementById(id);
+        if (modal && !modal.classList.contains('hidden')) {
+          closeFn();
+        }
+      });
+    }
+  });
+
+  // タブがアクティブになったときにタイマーの経過時間を即時同期し、別端末でのクラウド更新を取り込む
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
       Object.keys(activeTimers).forEach(categoryId => {
@@ -1096,6 +1389,12 @@ function setupGlobalEventListeners() {
           updateTimerTick(categoryId);
         }
       });
+
+      // タイマーが動作していない場合、別端末での最新更新をクラウドから取得
+      const isAnyTimerRunning = Object.keys(activeTimers).some(id => activeTimers[id]?.intervalId);
+      if (!isAnyTimerRunning && isCloudMode && !isSyncing) {
+        fetchStateFromServer();
+      }
     }
   });
 
