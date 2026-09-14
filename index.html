@@ -99,7 +99,7 @@
         <p class="modal-desc">カテゴリーの名称、本日の目標時間、アイコンを変更できます。</p>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">カテゴリー名称</label>
-          <input type="text" id="edit-cat-name-input" class="task-item-input" placeholder="カテゴリー名" style="width:100%;">
+          <input type="text" id="edit-cat-name-input" class="task-item-input" placeholder="カテゴリー名" style="width:100%;" autocomplete="off">
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">本日の目標時間（分）</label>
@@ -169,7 +169,7 @@
         <p class="modal-desc">管理したい新しいカテゴリー名と初期目標時間を設定します。</p>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">カテゴリー名</label>
-          <input type="text" id="add-cat-name-input" class="task-item-input" placeholder="例: 🏋️‍♂️ 筋トレ・運動" style="width:100%;">
+          <input type="text" id="add-cat-name-input" class="task-item-input" placeholder="例: 🏋️‍♂️ 筋トレ・運動" style="width:100%;" autocomplete="off">
         </div>
         <div class="form-group" style="margin-bottom: 1rem;">
           <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">初期目標時間（分）</label>
@@ -288,24 +288,26 @@
         <h3><i class="fa-solid fa-lock"></i> クラウド同期の合言葉</h3>
         <button id="auth-close-btn" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-body">
-        <p class="modal-desc">
-          このCloud Runサーバーとデータを同期するための合言葉（パスフレーズ）を入力してください。<br>
-          ※正しい合言葉を入力した端末（PC・スマホ）間でのみデータが共有されます。
-        </p>
-        <div class="form-group" style="margin-bottom: 1rem;">
-          <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">合言葉（パスフレーズ）</label>
-          <div class="auth-input-group">
-            <input type="password" id="auth-passphrase-input" class="task-item-input" placeholder="デプロイ時に設定した合言葉" autocomplete="current-password">
-            <button type="button" id="auth-toggle-pwd-btn" class="auth-toggle-pwd" title="パスワードの表示/非表示"><i class="fa-regular fa-eye"></i></button>
+      <form id="auth-form" autocomplete="off">
+        <div class="modal-body">
+          <p class="modal-desc">
+            このCloud Runサーバーとデータを同期するための合言葉（パスフレーズ）を入力してください。<br>
+            ※正しい合言葉を入力した端末（PC・スマホ）間でのみデータが共有されます。
+          </p>
+          <div class="form-group" style="margin-bottom: 1rem;">
+            <label style="display:block; font-size:0.85rem; font-weight:600; color:var(--text-muted); margin-bottom:0.4rem;">合言葉（パスフレーズ）</label>
+            <div class="auth-input-group">
+              <input type="password" id="auth-passphrase-input" class="task-item-input" placeholder="デプロイ時に設定した合言葉" autocomplete="off" disabled>
+              <button type="button" id="auth-toggle-pwd-btn" class="auth-toggle-pwd" title="パスワードの表示/非表示"><i class="fa-regular fa-eye"></i></button>
+            </div>
+            <div id="auth-error-msg" style="color:var(--accent-rose); font-size:0.8rem; margin-top:0.5rem; display:none;"></div>
           </div>
-          <div id="auth-error-msg" style="color:var(--accent-rose); font-size:0.8rem; margin-top:0.5rem; display:none;"></div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button id="auth-cancel-btn" class="btn btn-secondary">キャンセル (ローカル利用)</button>
-        <button id="auth-submit-btn" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-down"></i> 認証して同期開始</button>
-      </div>
+        <div class="modal-footer">
+          <button type="button" id="auth-cancel-btn" class="btn btn-secondary">キャンセル (ローカル利用)</button>
+          <button type="submit" id="auth-submit-btn" class="btn btn-primary"><i class="fa-solid fa-cloud-arrow-down"></i> 認証して同期開始</button>
+        </div>
+      </form>
     </div>
   </div>
 

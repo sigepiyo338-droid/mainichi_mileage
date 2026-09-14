@@ -164,6 +164,7 @@ function openAuthModal() {
   const input = document.getElementById('auth-passphrase-input');
   const errorDiv = document.getElementById('auth-error-msg');
   if (input) {
+    input.disabled = false; // モーダル表示時にのみ有効化
     input.value = getSavedPassphrase();
   }
   if (errorDiv) {
@@ -175,6 +176,11 @@ function openAuthModal() {
 }
 
 function closeAuthModal() {
+  const input = document.getElementById('auth-passphrase-input');
+  if (input) {
+    input.value = ''; // パスワードマネージャーの誤検知を防ぐため値をクリア
+    input.disabled = true; // 非表示時は完全に無効化してブラウザに検知させない
+  }
   document.getElementById('auth-modal')?.classList.add('hidden');
 }
 
@@ -1106,7 +1112,7 @@ function renderApp() {
           </div>
         </div>
         <div class="task-input-row">
-          <input type="text" id="input-item-${category.id}" class="task-item-input" placeholder="タスク・習慣を追加..." onkeypress="handleTaskInputKeyPress(event, '${category.id}')">
+          <input type="text" id="input-item-${category.id}" class="task-item-input" placeholder="タスク・習慣を追加..." autocomplete="off" data-lpignore="true" data-form-type="other" onkeypress="handleTaskInputKeyPress(event, '${category.id}')">
           <button class="btn btn-sm btn-secondary" onclick="submitTaskItem('${category.id}')"><i class="fa-solid fa-plus"></i> 追加</button>
         </div>
         <ul class="task-items-list">
@@ -1342,13 +1348,11 @@ function setupGlobalEventListeners() {
   // 合言葉モーダルのイベント
   document.getElementById('auth-close-btn')?.addEventListener('click', closeAuthModal);
   document.getElementById('auth-cancel-btn')?.addEventListener('click', closeAuthModal);
-  document.getElementById('auth-submit-btn')?.addEventListener('click', submitAuthPassphrase);
-  document.getElementById('auth-toggle-pwd-btn')?.addEventListener('click', toggleAuthPasswordVisibility);
-  document.getElementById('auth-passphrase-input')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      submitAuthPassphrase();
-    }
+  document.getElementById('auth-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitAuthPassphrase();
   });
+  document.getElementById('auth-toggle-pwd-btn')?.addEventListener('click', toggleAuthPasswordVisibility);
 
   // モーダルの背景クリックで閉じる処理（全モーダル共通UX）
   const allModals = [
