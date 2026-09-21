@@ -82,6 +82,19 @@ function shouldResetCategory(category, targetDateStr) {
     const targetDateObj = new Date(targetDateStr);
     return targetDateObj.getDate() === 1;
   }
+
+  if (category.resetTiming === 'quarterly') {
+    // 判定対象の日付（targetDateStr）が四半期の初日（1月1日、4月1日、7月1日、10月1日）であるか判定
+    const parts = targetDateStr.split('-');
+    if (parts.length === 3) {
+      const month = parseInt(parts[1], 10);
+      const day = parseInt(parts[2], 10);
+      return day === 1 && (month === 1 || month === 4 || month === 7 || month === 10);
+    }
+    const targetDateObj = new Date(targetDateStr);
+    const month = targetDateObj.getMonth();
+    return targetDateObj.getDate() === 1 && (month === 0 || month === 3 || month === 6 || month === 9);
+  }
   
   // デフォルトは毎日リセット ('daily' など)
   return true;
@@ -1041,6 +1054,8 @@ function renderApp() {
       resetLabel = `毎週${dayStr}曜`;
     } else if (category.resetTiming === 'monthly') {
       resetLabel = '毎月';
+    } else if (category.resetTiming === 'quarterly') {
+      resetLabel = '3ヶ月';
     } else if (category.resetTiming === 'manual') {
       resetLabel = '手動';
     } else {
