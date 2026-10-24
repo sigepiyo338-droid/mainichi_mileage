@@ -512,6 +512,55 @@ function incrementTaskCheckCount(categoryId, itemId) {
   }
 }
 
+function editCategoryTaskItem(categoryId, itemId) {
+  const category = state.categories.find(c => c.id === categoryId);
+  if (!category || !category.items) return;
+
+  const item = category.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const currentText = item.text || '';
+  const newText = prompt('タスク・習慣の名前を変更:', currentText);
+
+  if (newText === null) {
+    return; // キャンセル時
+  }
+
+  const trimmed = newText.trim();
+  if (!trimmed) {
+    alert('名前を入力してください。');
+    return;
+  }
+
+  // 画面全体と、該当カテゴリーカード内のタスクリストのスクロール位置を保存
+  const windowScrollPos = window.scrollY;
+  let listScrollTop = 0;
+  const card = document.getElementById(`card-${categoryId}`);
+  if (card) {
+    const list = card.querySelector('.task-items-list');
+    if (list) {
+      listScrollTop = list.scrollTop;
+    }
+  }
+
+  item.text = trimmed;
+
+  saveState();
+  renderApp();
+
+  // スクロール位置を復元
+  window.scrollTo(0, windowScrollPos);
+  const newCard = document.getElementById(`card-${categoryId}`);
+  if (newCard) {
+    const list = newCard.querySelector('.task-items-list');
+    if (list) {
+      list.scrollTop = listScrollTop;
+    }
+  }
+
+  showToast('タスク更新', `「${trimmed}」に名前を変更しました。`, 'info');
+}
+
 function removeCategoryTaskItem(categoryId, itemId) {
   const category = state.categories.find(c => c.id === categoryId);
   if (category && category.items) {
@@ -1141,8 +1190,11 @@ function renderApp() {
                   <span style="font-size:0.7rem; color:var(--text-muted); margin-left:0.25rem;">(${item.checkCount || 0}回)</span>
                 </span>
               </label>
-              <button class="btn-icon" onclick="incrementTaskCheckCount('${category.id}', '${item.id}')" title="実行回数を+1" style="color: var(--accent-emerald); font-size: 1.05rem; margin-right: 0.2rem;">
+              <button class="btn-icon" onclick="incrementTaskCheckCount('${category.id}', '${item.id}')" title="実行回数を+1" style="color: var(--accent-emerald); font-size: 1.05rem; margin-right: 0.15rem;">
                 <i class="fa-solid fa-circle-plus"></i>
+              </button>
+              <button class="btn-icon btn-edit-item" onclick="editCategoryTaskItem('${category.id}', '${item.id}')" title="名前を変更" style="margin-right: 0.15rem;">
+                <i class="fa-solid fa-pen"></i>
               </button>
               <button class="btn-icon btn-delete-item" onclick="removeCategoryTaskItem('${category.id}', '${item.id}')" title="削除">
                 <i class="fa-solid fa-trash-can"></i>

@@ -858,6 +858,18 @@ body {
   cursor: pointer;
 }
 
+.btn-edit-item {
+  opacity: 0.6;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.btn-edit-item:hover {
+  opacity: 1;
+  color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.15);
+}
+
 .btn-delete-item {
   opacity: 0.6;
   font-size: 0.8rem;
