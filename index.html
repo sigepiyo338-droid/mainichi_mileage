@@ -65,7 +65,15 @@
           </div>
         </div>
 
-
+        <div class="status-item backup-item">
+          <div class="status-label"><i class="fa-solid fa-floppy-disk"></i> バックアップ</div>
+          <div style="display:flex; align-items:center;">
+            <button id="quick-backup-btn" class="quick-backup-btn" title="1クリックで最新データをダウンロード">
+              <i id="quick-backup-icon" class="fa-solid fa-cloud-arrow-down"></i>
+              <span id="quick-backup-label">バックアップ</span>
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -259,6 +267,9 @@
           <button id="btn-import-data" class="btn btn-secondary" title="JSONファイルからデータを読み込み復元します" style="padding: 0.6rem 0.5rem;">
             <i class="fa-solid fa-file-import"></i> バックアップ読込
           </button>
+        </div>
+        <div id="settings-last-backup-info" style="font-size: 0.75rem; color: var(--text-muted); text-align: center; margin-top: -0.2rem;">
+          最終バックアップ: 未保存
         </div>
         <input type="file" id="import-file-input" accept=".json" style="display: none;">
         <!-- クラウド同期連携エリア -->

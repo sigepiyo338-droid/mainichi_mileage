@@ -25,7 +25,8 @@ let state = {
   lastUpdatedDate: getTodayString(),
   totalPoints: 0,
   maxPoints: 0,
-  categories: JSON.parse(JSON.stringify(INITIAL_CATEGORIES))
+  categories: JSON.parse(JSON.stringify(INITIAL_CATEGORIES)),
+  lastBackupDate: null
 };
 
 // 実行中のタイマー管理オブジェクト ({ categoryId: { intervalId, seconds } })
@@ -296,6 +297,9 @@ async function fetchStateFromServer() {
       }
 
       state = serverState;
+      if (typeof state.lastBackupDate === 'undefined') {
+        state.lastBackupDate = null;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       checkAndApplyDateTransition();
       renderApp();
@@ -374,6 +378,95 @@ async function initApp() {
   } else {
     updateSyncStatusUI('local', 'ローカル');
   }
+}
+
+// --- クイックバックアップ ＆ 7日間警告判定ロジック ---
+function getDaysSinceLastBackup() {
+  if (!state.lastBackupDate) {
+    return null; // 未バックアップ
+  }
+  const today = new Date(getTodayString());
+  const backupDate = new Date(state.lastBackupDate.substring(0, 10));
+  if (isNaN(backupDate.getTime())) {
+    return null;
+  }
+  const diffTime = today.getTime() - backupDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.max(0, diffDays);
+}
+
+function updateQuickBackupUI() {
+  const btn = document.getElementById('quick-backup-btn');
+  const label = document.getElementById('quick-backup-label');
+  const icon = document.getElementById('quick-backup-icon');
+  const settingsInfo = document.getElementById('settings-last-backup-info');
+
+  const days = getDaysSinceLastBackup();
+  const isWarning = (days === null || days >= 7);
+
+  if (btn && label && icon) {
+    if (isWarning) {
+      btn.classList.add('warning');
+      icon.className = 'fa-solid fa-triangle-exclamation';
+      
+      if (days === null) {
+        label.innerText = '要バックアップ (未保存)';
+        btn.title = 'バックアップがまだ作成されていません。クリックして最新データを安全に保存してください。';
+      } else {
+        label.innerText = `要バックアップ (${days}日前)`;
+        btn.title = `前回のバックアップから${days}日経過しています！クリックして最新データを保存してください。`;
+      }
+    } else {
+      btn.classList.remove('warning');
+      icon.className = 'fa-solid fa-cloud-arrow-down';
+      
+      if (days === 0) {
+        label.innerText = 'バックアップ (本日)';
+        btn.title = `本日のバックアップ作成済み (${state.lastBackupDate})。クリックで再ダウンロードできます。`;
+      } else {
+        label.innerText = `バックアップ (${days}日前)`;
+        btn.title = `前回のバックアップ: ${days}日前 (${state.lastBackupDate})。クリックでいつでも最新データを保存できます。`;
+      }
+    }
+  }
+
+  if (settingsInfo) {
+    if (days === null) {
+      settingsInfo.innerHTML = '<span style="color:var(--accent-amber); font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> 最終バックアップ: 未保存（要バックアップ）</span>';
+    } else if (days >= 7) {
+      settingsInfo.innerHTML = `<span style="color:var(--accent-amber); font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> 最終バックアップ: ${state.lastBackupDate} (${days}日前・要バックアップ)</span>`;
+    } else {
+      settingsInfo.innerHTML = `最終バックアップ: ${state.lastBackupDate} (${days === 0 ? '本日' : `${days}日前`})`;
+    }
+  }
+}
+
+function executeBackupDownload() {
+  // 実行中のタイマーがあれば一時停止する
+  const runningTimerIds = Object.keys(activeTimers).filter(id => activeTimers[id]?.intervalId);
+  if (runningTimerIds.length > 0) {
+    runningTimerIds.forEach(id => stopTimer(id));
+    showToast('⏸ タイマー一時停止', 'バックアップ出力のため、実行中のタイマーを一時停止しました。', 'info');
+  }
+
+  const todayStr = getTodayString();
+  state.lastBackupDate = todayStr;
+  saveState();
+
+  const dataStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.download = `mainichi_mileage_backup_${todayStr}.json`;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  updateQuickBackupUI();
+  showToast('💾 バックアップ完了', '最新データをJSONファイルとしてダウンロードしました。', 'success');
 }
 
 // --- HTMLエスケープヘルパー ---
@@ -681,7 +774,8 @@ function loadState() {
         lastUpdatedDate: parsed.lastUpdatedDate || getTodayString(),
         totalPoints: points,
         maxPoints: Math.max(maxPts, points),
-        categories: loadedCategories
+        categories: loadedCategories,
+        lastBackupDate: parsed.lastBackupDate || null
       };
     } catch (e) {
       console.error('Failed to parse state from localStorage', e);
@@ -700,8 +794,12 @@ function loadState() {
       if (!state.lastUpdatedDate) {
         state.lastUpdatedDate = getTodayString();
       }
+      if (!state.lastBackupDate) {
+        state.lastBackupDate = null;
+      }
     } else {
       state.categories.forEach(cat => { cat.items = []; });
+      state.lastBackupDate = null;
     }
     saveState();
   }
@@ -1051,6 +1149,9 @@ function renderApp() {
 
   document.getElementById('user-level').innerText = getRankName(state.totalPoints);
   document.getElementById('last-date').innerText = state.lastUpdatedDate;
+
+  // クイックバックアップボタン表示更新
+  updateQuickBackupUI();
 
   // ポイントプログレスバー更新
   const pointsProgressBar = document.getElementById('points-progress-bar');
@@ -1469,30 +1570,9 @@ function setupGlobalEventListeners() {
     }
   });
 
-  // データのエクスポート（バックアップ出力）
-  document.getElementById('btn-export-data').addEventListener('click', () => {
-    // 実行中のタイマーがあれば一時停止する
-    const runningTimerIds = Object.keys(activeTimers).filter(id => activeTimers[id]?.intervalId);
-    if (runningTimerIds.length > 0) {
-      runningTimerIds.forEach(id => stopTimer(id));
-      showToast('⏸ タイマー一時停止', 'バックアップ出力のため、実行中のタイマーを一時停止しました。', 'info');
-    }
-
-    const dataStr = JSON.stringify(state, null, 2);
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const dateStr = getTodayString();
-    
-    link.download = `mainichi_mileage_backup_${dateStr}.json`;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    showToast('💾 バックアップ出力', 'データをJSONファイルとして出力しました。', 'success');
-  });
+  // --- クイックバックアップ ＆ 7日間警告ロジック ---
+  document.getElementById('quick-backup-btn')?.addEventListener('click', executeBackupDownload);
+  document.getElementById('btn-export-data')?.addEventListener('click', executeBackupDownload);
 
   // データのインポート（バックアップ読込）
   const fileInput = document.getElementById('import-file-input');
@@ -1545,12 +1625,14 @@ function setupGlobalEventListeners() {
           lastUpdatedDate: parsed.lastUpdatedDate || todayStr,
           totalPoints: points,
           maxPoints: Math.max(maxPts, points),
-          categories: loadedCategories
+          categories: loadedCategories,
+          lastBackupDate: parsed.lastBackupDate || null
         };
 
         // 状態保存と描画更新
         saveState();
         renderApp();
+        updateQuickBackupUI();
         showToast('🔄 バックアップ復元', 'データをバックアップファイルから復元しました！', 'success');
       } catch (err) {
         showToast('❌ 読み込み失敗', `無効なファイルです: ${err.message}`, 'warning');
