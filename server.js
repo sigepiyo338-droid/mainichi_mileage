@@ -58,10 +58,27 @@ function requireAuth(req, res, next) {
 
 // --- API ルーティング ---
 
-// サーバー状態 & 合言葉が必要かどうかの確認
-app.get('/api/config', (req, res) => {
+// サーバー状態 & 合言葉・Firestore接続状態の確認
+app.get('/api/config', async (req, res) => {
+  let isFirestoreConnected = false;
+  let firestoreErrorMessage = null;
+
+  if (firestore) {
+    try {
+      const docRef = firestore.collection(COLLECTION_NAME).doc(DOCUMENT_NAME);
+      await docRef.get();
+      isFirestoreConnected = true;
+    } catch (e) {
+      isFirestoreConnected = false;
+      firestoreErrorMessage = e.message;
+      console.warn('⚠️ Firestore接続テスト失敗:', e.message);
+    }
+  }
+
   res.json({
-    requiresPassphrase: !!SYNC_PASSPHRASE
+    requiresPassphrase: !!SYNC_PASSPHRASE,
+    isFirestoreConnected,
+    firestoreErrorMessage
   });
 });
 
@@ -123,7 +140,7 @@ app.post('/api/state', requireAuth, async (req, res) => {
 
     const payload = {
       state: state,
-      updatedAt: new Date().toISOString()
+      updatedAt: state.updatedAt || new Date().toISOString()
     };
 
     if (firestore) {
@@ -138,7 +155,7 @@ app.post('/api/state', requireAuth, async (req, res) => {
       updatedAt: payload.updatedAt
     });
   } catch (err) {
-    console.error('State保存エラー:', err);
+    console.error('State保存エラー (Firestore):', err.message);
     res.status(500).json({ success: false, error: 'データの保存に失敗しました: ' + err.message });
   }
 });

@@ -26,7 +26,8 @@ let state = {
   totalPoints: 0,
   maxPoints: 0,
   categories: JSON.parse(JSON.stringify(INITIAL_CATEGORIES)),
-  lastBackupDate: null
+  lastBackupDate: null,
+  updatedAt: new Date().toISOString()
 };
 
 // 実行中のタイマー管理オブジェクト ({ categoryId: { intervalId, seconds } })
@@ -256,6 +257,13 @@ async function submitAuthPassphrase() {
   }
 }
 
+function countStateTasks(targetState) {
+  if (!targetState || !Array.isArray(targetState.categories)) return 0;
+  return targetState.categories.reduce((total, cat) => {
+    return total + (Array.isArray(cat.items) ? cat.items.length : 0);
+  }, 0);
+}
+
 async function fetchStateFromServer() {
   if (!isCloudMode) return;
 
@@ -284,7 +292,37 @@ async function fetchStateFromServer() {
 
     if (data.exists && data.state) {
       const serverState = data.state;
-      
+      const localTaskCount = countStateTasks(state);
+      const serverTaskCount = countStateTasks(serverState);
+
+      const localUpdatedAt = state.updatedAt ? new Date(state.updatedAt).getTime() : 0;
+      const serverUpdatedAt = (data.updatedAt || serverState.updatedAt)
+        ? new Date(data.updatedAt || serverState.updatedAt).getTime()
+        : 0;
+
+      // 【安全策 1: タスク消失の絶対防止】
+      // ローカルに登録済みタスクがあり、サーバー側が0個（初期状態）の場合は上書きせずローカルを優先
+      if (localTaskCount > 0 && serverTaskCount === 0) {
+        console.warn('⚠️ サーバーが初期状態（タスク0件）のため、ローカルの登録データを優先してクラウドへ同期保存します。');
+        await saveStateToServer(state);
+        updateSyncStatusUI('synced', '同期完了', 'ローカルの登録データをクラウドへ保護・保存しました');
+        return;
+      }
+
+      // 【安全策 2: タイムスタンプ保護】
+      // ローカル側の方が新しく、タスク数も同等以上の場合はローカルをサーバーへプッシュ
+      if (localUpdatedAt > serverUpdatedAt && localTaskCount >= serverTaskCount) {
+        console.log('ℹ️ ローカル側の更新日時が新しいため、ローカル状態をサーバーへ保存します。');
+        await saveStateToServer(state);
+        updateSyncStatusUI('synced', '同期完了', '最新のローカルデータをクラウドへ反映しました');
+        return;
+      }
+
+      // 【安全策 3: 直前エマージェンシースナップショット】
+      try {
+        localStorage.setItem(STORAGE_KEY + '_emergency_backup', JSON.stringify(state));
+      } catch (e) {}
+
       // カテゴリーの互換性・初期化保護
       if (Array.isArray(serverState.categories)) {
         const todayStr = getTodayString();
@@ -300,14 +338,22 @@ async function fetchStateFromServer() {
       if (typeof state.lastBackupDate === 'undefined') {
         state.lastBackupDate = null;
       }
+      if (!state.updatedAt && data.updatedAt) {
+        state.updatedAt = data.updatedAt;
+      }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       checkAndApplyDateTransition();
       renderApp();
       updateSyncStatusUI('synced', '同期完了', 'クラウドと最新状態が同期されています');
     } else {
-      // サーバーにデータがまだない場合、現在のローカルstateをサーバーへ初期登録
-      await saveStateToServer(state);
-      updateSyncStatusUI('synced', '同期完了', 'クラウドに初期データを登録しました');
+      // サーバーにデータがまだない場合
+      const localTaskCount = countStateTasks(state);
+      if (localTaskCount > 0 || state.totalPoints > 0) {
+        await saveStateToServer(state);
+        updateSyncStatusUI('synced', '同期完了', 'クラウドに初期データを登録しました');
+      } else {
+        updateSyncStatusUI('synced', '同期完了');
+      }
     }
   } catch (err) {
     console.warn('クラウド同期エラー:', err);
@@ -364,6 +410,16 @@ async function initApp() {
       const configRes = await fetch('/api/config');
       const config = await configRes.json();
       const savedPass = getSavedPassphrase();
+
+      // Firestore接続状態チェック
+      if (!config.isFirestoreConnected && config.firestoreErrorMessage) {
+        console.warn('⚠️ Firestore接続警告:', config.firestoreErrorMessage);
+        if (config.firestoreErrorMessage.includes('PERMISSION_DENIED') || config.firestoreErrorMessage.includes('permission')) {
+          showToast('⚠️ データベース権限未設定', 'Cloud Run のサービスアカウントに Firestore アクセス権限（roles/datastore.user）がありません。', 'warning');
+        } else if (config.firestoreErrorMessage.includes('NOT_FOUND') || config.firestoreErrorMessage.includes('not exist')) {
+          showToast('⚠️ Firestore未作成', 'Google Cloud で Firestore データベース (default) が作成されていません。', 'warning');
+        }
+      }
 
       if (config.requiresPassphrase && !savedPass) {
         updateSyncStatusUI('error', '要合言葉', 'クリックして合言葉を入力');
@@ -775,7 +831,8 @@ function loadState() {
         totalPoints: points,
         maxPoints: Math.max(maxPts, points),
         categories: loadedCategories,
-        lastBackupDate: parsed.lastBackupDate || null
+        lastBackupDate: parsed.lastBackupDate || null,
+        updatedAt: parsed.updatedAt || new Date().toISOString()
       };
     } catch (e) {
       console.error('Failed to parse state from localStorage', e);
@@ -801,12 +858,14 @@ function loadState() {
       state.categories.forEach(cat => { cat.items = []; });
       state.lastBackupDate = null;
     }
+    state.updatedAt = new Date().toISOString();
     saveState();
   }
 }
 
 // データ保存
 function saveState() {
+  state.updatedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
   // クラウド同期モードの場合はデバウンスでサーバーへ保存

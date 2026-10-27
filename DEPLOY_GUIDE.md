@@ -72,7 +72,30 @@ Google Cloud コンソール右上にある **「Cloud Shell をアクティブ�
      --set-env-vars SYNC_PASSPHRASE="あなたが決めた合言葉"
    ```
 3. 画面の指示に従い、API有効化のプロンプトが出たら `y` を入力します。
-4. デプロイ完了後、発行された `Service URL` が表示されます。
+4. **【重要・必須】Cloud Run に Firestore へのアクセス権限を付与する（初回1回のみ）**:
+   Cloud Run がデータベース（Firestore）にデータを恒久保存できるように、Cloud Shell で以下のコマンドを1回実行してください：
+   ```bash
+   PROJECT_ID=$(gcloud config get-value project)
+   PROJECT_NUM=$(gcloud projects describe $PROJECT_ID --format='value(projectNumber)')
+   gcloud projects add-iam-policy-binding $PROJECT_ID \
+     --member="serviceAccount:${PROJECT_NUM}-compute@developer.gserviceaccount.com" \
+     --role="roles/datastore.user"
+   ```
+   > ※この権限がないと、Cloud Run 側でデータベースへの書き込みが拒否され、コンテナ再起動（デプロイ）時にデータが初期化される原因になります。
+5. デプロイ完了後、発行された `Service URL` が表示されます。
+
+---
+
+### アプリの更新（2回目以降のデプロイ手順）
+
+コードを最新に更新して反映させたい場合は、Cloud Shell で以下のコマンドを実行します：
+
+```bash
+cd mainichi_mileage
+git pull origin main
+gcloud run deploy mainichi-mileage --source .
+```
+※アプリ側で二重のデータ保護ロジック（ローカルデータ優先＆エマージェンシーバックアップ）が備わっているため、デプロイしてもデータが初期化されることはありません。
 
 ---
 
