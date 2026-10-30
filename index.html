@@ -278,11 +278,17 @@
             <span style="font-size:0.85rem; font-weight:600;"><i class="fa-solid fa-cloud"></i> クラウド同期 (Cloud Run)</span>
             <span id="settings-sync-status" class="sync-badge local" style="font-size:0.7rem;">ローカル</span>
           </div>
+          <div id="settings-firestore-status" style="font-size:0.75rem; color:var(--text-muted); display:none;"></div>
           <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">同じ合言葉を設定したPC・スマホ間でデータを自動同期できます。</p>
           <button id="btn-change-passphrase" class="btn btn-secondary btn-sm" style="width:100%; margin-top:0.2rem;">
             <i class="fa-solid fa-key"></i> 合言葉を設定 / 変更
           </button>
         </div>
+
+        <!-- 緊急バックアップ復元（自動退避データが存在する場合のみ表示） -->
+        <button id="btn-restore-emergency" class="btn btn-secondary btn-sm" style="width: 100%; display: none; border-color: var(--accent-amber); color: var(--accent-amber);" title="前回の同期直前の自動退避データを復元します">
+          <i class="fa-solid fa-clock-rotate-left"></i> 前回の自動退避データから復元
+        </button>
 
         <button id="btn-reset-all" class="btn btn-ghost" title="累積ポイントをそれぞれ5にリセットします" style="width: 100%; border: 1px solid rgba(255, 255, 255, 0.08); margin-top: 0.5rem;">
           <i class="fa-solid fa-rotate-left"></i> ポイントのリセット

@@ -104,10 +104,12 @@ app.get('/api/state', requireAuth, async (req, res) => {
       const doc = await docRef.get();
 
       if (!doc.exists) {
+        console.log('ℹ️ [Firestore] current_state ドキュメントはまだ存在しません。');
         return res.json({ exists: false, state: null });
       }
 
       const data = doc.data();
+      console.log(`✅ [Firestore] state を取得しました (updatedAt: ${data.updatedAt})`);
       return res.json({
         exists: true,
         state: data.state,
@@ -146,6 +148,7 @@ app.post('/api/state', requireAuth, async (req, res) => {
     if (firestore) {
       const docRef = firestore.collection(COLLECTION_NAME).doc(DOCUMENT_NAME);
       await docRef.set(payload, { merge: true });
+      console.log(`✅ [Firestore] state を正常に保存しました (updatedAt: ${payload.updatedAt})`);
     } else {
       memoryFallbackState = payload;
     }

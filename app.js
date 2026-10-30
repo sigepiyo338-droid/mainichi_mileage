@@ -10,6 +10,7 @@ const SYNC_PASSPHRASE_KEY = 'mainichi_mileage_sync_passphrase';
 const isCloudMode = window.location.protocol.startsWith('http');
 let cloudSyncDebounceTimer = null;
 let isSyncing = false;
+let isInitialSyncCompleted = false; // 初回サーバー同期完了フラグ（未同期データの誤送信を防止）
 
 // デフォルト初期データ構造
 const INITIAL_CATEGORIES = [
@@ -241,6 +242,7 @@ async function submitAuthPassphrase() {
       closeAuthModal();
       showToast('🔑 認証成功', '合言葉が確認されました。クラウド同期を開始します！', 'success');
       await fetchStateFromServer();
+      isInitialSyncCompleted = true;
     } else {
       if (errorDiv) {
         errorDiv.innerText = data.error || '合言葉が一致しません。';
@@ -262,6 +264,41 @@ function countStateTasks(targetState) {
   return targetState.categories.reduce((total, cat) => {
     return total + (Array.isArray(cat.items) ? cat.items.length : 0);
   }, 0);
+}
+
+// サーバーから受信した正規 state をローカルに適用する
+function applyServerState(serverState, serverUpdatedAt) {
+  if (!serverState || typeof serverState !== 'object') return;
+
+  // 直前エマージェンシースナップショット（現在の端末に有効データがある場合のみ退避）
+  try {
+    if (state && countStateTasks(state) > 0) {
+      localStorage.setItem(STORAGE_KEY + '_emergency_backup', JSON.stringify(state));
+      updateEmergencyRestoreButton();
+    }
+  } catch (e) {}
+
+  // カテゴリーの互換性・初期化保護
+  if (Array.isArray(serverState.categories)) {
+    const todayStr = getTodayString();
+    serverState.categories.forEach(cat => {
+      if (!Array.isArray(cat.items)) cat.items = [];
+      if (!cat.resetTiming) cat.resetTiming = 'daily';
+      if (cat.resetDayOfWeek === undefined) cat.resetDayOfWeek = 1;
+      if (!cat.lastResetDate) cat.lastResetDate = serverState.lastUpdatedDate || todayStr;
+    });
+  }
+
+  state = serverState;
+  if (typeof state.lastBackupDate === 'undefined') {
+    state.lastBackupDate = null;
+  }
+  if (serverUpdatedAt) {
+    state.updatedAt = serverUpdatedAt;
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  checkAndApplyDateTransition();
+  renderApp();
 }
 
 async function fetchStateFromServer() {
@@ -291,62 +328,13 @@ async function fetchStateFromServer() {
     const data = await res.json();
 
     if (data.exists && data.state) {
-      const serverState = data.state;
-      const localTaskCount = countStateTasks(state);
-      const serverTaskCount = countStateTasks(serverState);
-
-      const localUpdatedAt = state.updatedAt ? new Date(state.updatedAt).getTime() : 0;
-      const serverUpdatedAt = (data.updatedAt || serverState.updatedAt)
-        ? new Date(data.updatedAt || serverState.updatedAt).getTime()
-        : 0;
-
-      // 【安全策 1: タスク消失の絶対防止】
-      // ローカルに登録済みタスクがあり、サーバー側が0個（初期状態）の場合は上書きせずローカルを優先
-      if (localTaskCount > 0 && serverTaskCount === 0) {
-        console.warn('⚠️ サーバーが初期状態（タスク0件）のため、ローカルの登録データを優先してクラウドへ同期保存します。');
-        await saveStateToServer(state);
-        updateSyncStatusUI('synced', '同期完了', 'ローカルの登録データをクラウドへ保護・保存しました');
-        return;
-      }
-
-      // 【安全策 2: タイムスタンプ保護】
-      // ローカル側の方が新しく、タスク数も同等以上の場合はローカルをサーバーへプッシュ
-      if (localUpdatedAt > serverUpdatedAt && localTaskCount >= serverTaskCount) {
-        console.log('ℹ️ ローカル側の更新日時が新しいため、ローカル状態をサーバーへ保存します。');
-        await saveStateToServer(state);
-        updateSyncStatusUI('synced', '同期完了', '最新のローカルデータをクラウドへ反映しました');
-        return;
-      }
-
-      // 【安全策 3: 直前エマージェンシースナップショット】
-      try {
-        localStorage.setItem(STORAGE_KEY + '_emergency_backup', JSON.stringify(state));
-      } catch (e) {}
-
-      // カテゴリーの互換性・初期化保護
-      if (Array.isArray(serverState.categories)) {
-        const todayStr = getTodayString();
-        serverState.categories.forEach(cat => {
-          if (!Array.isArray(cat.items)) cat.items = [];
-          if (!cat.resetTiming) cat.resetTiming = 'daily';
-          if (cat.resetDayOfWeek === undefined) cat.resetDayOfWeek = 1;
-          if (!cat.lastResetDate) cat.lastResetDate = serverState.lastUpdatedDate || todayStr;
-        });
-      }
-
-      state = serverState;
-      if (typeof state.lastBackupDate === 'undefined') {
-        state.lastBackupDate = null;
-      }
-      if (!state.updatedAt && data.updatedAt) {
-        state.updatedAt = data.updatedAt;
-      }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      checkAndApplyDateTransition();
-      renderApp();
+      // 【複数端末同期の原則】サーバーに最新データが存在する場合は、無条件でサーバーデータを正として取り込む！
+      // （※未同期の別端末の初期データでサーバーを誤って上書きすることは絶対にしません）
+      applyServerState(data.state, data.updatedAt);
       updateSyncStatusUI('synced', '同期完了', 'クラウドと最新状態が同期されています');
     } else {
-      // サーバーにデータがまだない場合
+      // サーバーにデータがまだ存在しない場合（初回環境構築時のみ）：
+      // ローカルに有効なデータがあればサーバーへ初期保存
       const localTaskCount = countStateTasks(state);
       if (localTaskCount > 0 || state.totalPoints > 0) {
         await saveStateToServer(state);
@@ -396,15 +384,80 @@ async function saveStateToServer(stateToSave) {
   }
 }
 
+// Firestore 接続診断結果をUIに反映
+function handleFirestoreConfigStatus(config) {
+  const statusEl = document.getElementById('settings-firestore-status');
+  if (!statusEl) return;
+
+  if (config.isFirestoreConnected) {
+    statusEl.style.display = 'block';
+    statusEl.style.color = 'var(--accent-emerald)';
+    statusEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> Firestore データベース: 正常接続中';
+  } else if (config.firestoreErrorMessage) {
+    statusEl.style.display = 'block';
+    statusEl.style.color = 'var(--accent-rose)';
+    let reason = config.firestoreErrorMessage;
+    if (reason.includes('PERMISSION_DENIED') || reason.includes('permission')) {
+      reason = '権限不足 (roles/datastore.user が必要です)';
+    } else if (reason.includes('NOT_FOUND') || reason.includes('not exist')) {
+      reason = 'Firestoreデータベース(default)が未作成です';
+    }
+    statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Firestore未接続: ${reason}`;
+  }
+}
+
+// 緊急退避データの復元ボタン更新
+function updateEmergencyRestoreButton() {
+  const btn = document.getElementById('btn-restore-emergency');
+  if (!btn) return;
+  try {
+    const emergencyData = localStorage.getItem(STORAGE_KEY + '_emergency_backup');
+    if (emergencyData) {
+      const parsed = JSON.parse(emergencyData);
+      const taskCount = countStateTasks(parsed);
+      btn.style.display = 'block';
+      btn.innerHTML = `<i class="fa-solid fa-clock-rotate-left"></i> 前回の自動退避データから復元 (${taskCount}個のタスク / ${parsed.totalPoints || 0}pt)`;
+    } else {
+      btn.style.display = 'none';
+    }
+  } catch (e) {
+    btn.style.display = 'none';
+  }
+}
+
+// 緊急退避データからの復元実行
+function restoreEmergencyBackup() {
+  try {
+    const emergencyData = localStorage.getItem(STORAGE_KEY + '_emergency_backup');
+    if (!emergencyData) {
+      showToast('⚠️ 復元不可', '自動退避データが見つかりませんでした。', 'warning');
+      return;
+    }
+    if (confirm('前回の同期直前に退避されたローカルデータから復元しますか？\n（現在のデータは置き換えられ、クラウドにも保存されます）')) {
+      const parsed = JSON.parse(emergencyData);
+      state = parsed;
+      state.updatedAt = new Date().toISOString();
+      saveState();
+      renderApp();
+      showToast('🔄 復元完了', '自動退避データからタスクとポイントを復元しました！', 'success');
+    }
+  } catch (e) {
+    showToast('❌ 復元エラー', e.message, 'warning');
+  }
+}
+
 // --- 初期化 & ローカルストレージロード ---
 async function initApp() {
-  loadState();
-  checkAndApplyDateTransition();
-  renderApp();
   setupGlobalEventListeners();
   requestNotificationPermission();
+  updateEmergencyRestoreButton();
 
   if (isCloudMode) {
+    // クラウドモードの場合：まずローカルキャッシュを「静かに」読み込み（初期画面チラつき防止）
+    // ※未同期の初期データがサーバーに飛ぶのを防ぐため、saveState() は一切呼びません
+    loadStateSilently();
+    renderApp();
+
     updateSyncStatusUI('syncing', '接続中...');
     try {
       const configRes = await fetch('/api/config');
@@ -412,6 +465,7 @@ async function initApp() {
       const savedPass = getSavedPassphrase();
 
       // Firestore接続状態チェック
+      handleFirestoreConfigStatus(config);
       if (!config.isFirestoreConnected && config.firestoreErrorMessage) {
         console.warn('⚠️ Firestore接続警告:', config.firestoreErrorMessage);
         if (config.firestoreErrorMessage.includes('PERMISSION_DENIED') || config.firestoreErrorMessage.includes('permission')) {
@@ -429,10 +483,19 @@ async function initApp() {
       }
     } catch (err) {
       console.warn('サーバー設定取得エラー:', err);
-      updateSyncStatusUI('local', 'ローカル');
+      updateSyncStatusUI('local', 'オフライン');
+      checkAndApplyDateTransition();
+      renderApp();
+    } finally {
+      isInitialSyncCompleted = true;
     }
   } else {
+    // ローカルファイルモード (file:///)
+    loadState();
+    checkAndApplyDateTransition();
+    renderApp();
     updateSyncStatusUI('local', 'ローカル');
+    isInitialSyncCompleted = true;
   }
 }
 
@@ -788,6 +851,7 @@ function closeAddCategoryModal() {
 }
 
 function openSettingsModal() {
+  updateEmergencyRestoreButton();
   document.getElementById('settings-modal').classList.remove('hidden');
 }
 
@@ -795,7 +859,59 @@ function closeSettingsModal() {
   document.getElementById('settings-modal').classList.add('hidden');
 }
 
-// データ読み込み
+// データ読み込み（saveStateを呼ばない安全読み込み：クラウドモード起動用）
+function loadStateSilently() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      const points = typeof parsed.totalPoints === 'number' ? parsed.totalPoints : 0;
+      const maxPts = typeof parsed.maxPoints === 'number' ? parsed.maxPoints : points;
+      const loadedCategories = Array.isArray(parsed.categories) 
+        ? parsed.categories 
+        : JSON.parse(JSON.stringify(INITIAL_CATEGORIES));
+
+      const todayStr = getTodayString();
+      loadedCategories.forEach(cat => {
+        if (!Array.isArray(cat.items)) cat.items = [];
+        if (!cat.resetTiming) cat.resetTiming = 'daily';
+        if (cat.resetDayOfWeek === undefined) cat.resetDayOfWeek = 1;
+        if (!cat.lastResetDate) cat.lastResetDate = parsed.lastUpdatedDate || todayStr;
+      });
+
+      state = {
+        lastUpdatedDate: parsed.lastUpdatedDate || getTodayString(),
+        totalPoints: points,
+        maxPoints: Math.max(maxPts, points),
+        categories: loadedCategories,
+        lastBackupDate: parsed.lastBackupDate || null,
+        updatedAt: parsed.updatedAt || null
+      };
+      return;
+    } catch (e) {
+      console.error('Failed to parse state from localStorage', e);
+    }
+  }
+
+  // ローカルに保存がない場合：仮の初期データをセット（※saveStateは呼ばない）
+  let initialProfile = null;
+  if (typeof MY_PROFILE_DATA !== 'undefined') {
+    initialProfile = MY_PROFILE_DATA;
+  } else if (typeof SAMPLE_PROFILE_DATA !== 'undefined') {
+    initialProfile = SAMPLE_PROFILE_DATA;
+  }
+
+  if (initialProfile) {
+    state = JSON.parse(JSON.stringify(initialProfile));
+    if (!state.lastUpdatedDate) state.lastUpdatedDate = getTodayString();
+    if (!state.lastBackupDate) state.lastBackupDate = null;
+  } else {
+    state.categories.forEach(cat => { cat.items = []; });
+    state.lastBackupDate = null;
+  }
+}
+
+// データ読み込み（通常用）
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
@@ -869,7 +985,8 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
   // クラウド同期モードの場合はデバウンスでサーバーへ保存
-  if (isCloudMode) {
+  // （※初回同期が完了していない間は、別端末の初期データでサーバーを誤上書きしないようブロック）
+  if (isCloudMode && isInitialSyncCompleted) {
     if (cloudSyncDebounceTimer) {
       clearTimeout(cloudSyncDebounceTimer);
     }
@@ -1570,6 +1687,11 @@ function setupGlobalEventListeners() {
   document.getElementById('btn-change-passphrase')?.addEventListener('click', () => {
     closeSettingsModal();
     openAuthModal();
+  });
+
+  // 設定画面内の「前回の自動退避データから復元」ボタン
+  document.getElementById('btn-restore-emergency')?.addEventListener('click', () => {
+    restoreEmergencyBackup();
   });
 
   // 合言葉モーダルのイベント
